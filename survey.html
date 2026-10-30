@@ -30,6 +30,8 @@
   td.num { text-align:right; white-space:nowrap; }
   td.q { min-width:220px; }
   tr.sum-row td { background:#eef5ff; font-weight:700; }
+  tr.group-row td { background:#f6f8fb; font-weight:700; }
+  tr.sub-row td.q { padding-left:22px; }
   .result-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
   .result-box { background:#f8f9fb; border-radius:9px; padding:14px 16px; }
   .result-box .k { font-size:13px; color:#777; }
@@ -136,7 +138,7 @@
           <tbody></tbody>
         </table>
       </div>
-      <div class="hint" style="margin-top:8px">100점 환산 = 평균 × 20 · 긍정률 = (4점 + 5점) ÷ 응답 수</div>
+      <div class="hint" style="margin-top:8px">100점 환산 = 평균 × 20 · 긍정률 = (4점 + 5점) ÷ 응답 수 · 1-1, 1-2처럼 하위 번호가 있는 문항은 상위 번호(1번) 평균을 함께 표시</div>
     </div>
 
     <div class="card" id="openCard">
@@ -237,35 +239,65 @@ function filteredRows() {
   return rows.filter(r => (r[fc] ?? '').trim() === fv);
 }
 
-let lastStats = [];
+// "1-1." "1.2)" "[2-3]" 같은 하위 번호 → { main:'1', label:'1-1' }
+const SUB_NO = /^\s*\[?(\d+)\s*[-–._]\s*(\d+)\]?[.)]?\s+/;
+const TOP_NO = /^\s*\[?(\d+)\]?[.)]\s+/;
+function subNo(q) {
+  const m = q.match(SUB_NO);
+  return m ? { main: m[1], label: `${m[1]}-${m[2]}` } : null;
+}
+
+function summarize(cnt) {
+  const n = cnt.reduce((a,b) => a+b, 0);
+  const mean = n ? cnt.reduce((a,c,i) => a + c*(i+1), 0) / n : 0;
+  return { cnt, n, mean, pos: n ? (cnt[3]+cnt[4]) / n : 0 };
+}
+
+let lastRows = [];
 function render() {
   const data = filteredRows();
   const stats = likertCols.map((ci, idx) => {
     const cnt = [0,0,0,0,0];
     data.forEach(r => { const s = toScore(r[ci] ?? ''); if (s) cnt[s-1]++; });
-    const n = cnt.reduce((a,b) => a+b, 0);
-    const mean = n ? cnt.reduce((a,c,i) => a + c*(i+1), 0) / n : 0;
-    return { no: idx+1, q: headers[ci], cnt, n, mean, pos: n ? (cnt[3]+cnt[4]) / n : 0 };
+    const sn = subNo(headers[ci]);
+    const top = headers[ci].match(TOP_NO);
+    return { no: sn ? sn.label : top ? top[1] : String(idx+1), main: sn?.main, q: headers[ci], ...summarize(cnt) };
   });
+
+  // 같은 상위 번호(1-1, 1-2 …)끼리 묶어 상위 번호 평균을 함께 표기
+  const blocks = [];
+  stats.forEach(s => {
+    const last = blocks[blocks.length - 1];
+    if (s.main && last?.main === s.main) last.items.push(s);
+    else blocks.push({ main: s.main, items: [s] });
+  });
+  blocks.forEach(b => {
+    if (!b.main) { b.stat = b.items[0]; return; }
+    const cnt = [0,0,0,0,0];
+    b.items.forEach(s => s.cnt.forEach((c,i) => cnt[i] += c));
+    b.stat = { no: b.main, q: `${b.main}번 평균 (${b.items.map(s => s.no).join(', ')})`, ...summarize(cnt) };
+  });
+
   const sort = document.getElementById('sortBy').value;
-  if (sort === 'desc') stats.sort((a,b) => b.mean - a.mean);
-  if (sort === 'asc') stats.sort((a,b) => a.mean - b.mean);
-  lastStats = stats;
+  const cmp = sort === 'desc' ? (a,b) => b.mean - a.mean : sort === 'asc' ? (a,b) => a.mean - b.mean : null;
+  if (cmp) {
+    blocks.forEach(b => b.items.sort(cmp));
+    blocks.sort((a,b) => cmp(a.stat, b.stat));
+  }
+  lastRows = blocks.flatMap(b => b.main ? [{ ...b.stat, group: true }, ...b.items.map(s => ({ ...s, sub: true }))] : b.items);
 
   const tot = [0,0,0,0,0];
   stats.forEach(s => s.cnt.forEach((c,i) => tot[i] += c));
-  const totN = tot.reduce((a,b) => a+b, 0);
-  const totMean = totN ? tot.reduce((a,c,i) => a + c*(i+1), 0) / totN : 0;
+  const total = summarize(tot);
 
   document.getElementById('sumN').textContent = data.length + '명';
   document.getElementById('sumQ').textContent = stats.length + '개';
-  document.getElementById('sumMean').innerHTML = scoreHtml(totMean) + ` <span style="font-size:13px;color:#777">(${(totMean*20).toFixed(1)}점)</span>`;
-  document.getElementById('sumPos').textContent = totN ? pct((tot[3]+tot[4]) / totN) : '-';
+  document.getElementById('sumMean').innerHTML = scoreHtml(total.mean) + ` <span style="font-size:13px;color:#777">(${(total.mean*20).toFixed(1)}점)</span>`;
+  document.getElementById('sumPos').textContent = total.n ? pct(total.pos) : '-';
 
-  const tbody = document.querySelector('#likertTable tbody');
-  tbody.innerHTML = stats.map(s => `
-    <tr>
-      <td class="num">${s.no}</td>
+  const rowHtml = (s, cls) => `
+    <tr class="${cls}">
+      <td class="num">${esc(s.no)}</td>
       <td class="q">${esc(s.q)}</td>
       <td class="num">${s.n}</td>
       ${s.cnt.map(c => `<td class="num">${c}<br><span class="hint">${s.n ? pct(c/s.n) : '-'}</span></td>`).join('')}
@@ -273,15 +305,10 @@ function render() {
       <td class="num">${(s.mean*20).toFixed(1)}</td>
       <td class="num">${s.n ? pct(s.pos) : '-'}</td>
       <td>${barHtml(s.cnt, s.n)}</td>
-    </tr>`).join('') + `
-    <tr class="sum-row">
-      <td></td><td>전체</td><td class="num">${totN}</td>
-      ${tot.map(c => `<td class="num">${c}<br><span class="hint">${totN ? pct(c/totN) : '-'}</span></td>`).join('')}
-      <td class="num">${scoreHtml(totMean)}</td>
-      <td class="num">${(totMean*20).toFixed(1)}</td>
-      <td class="num">${totN ? pct((tot[3]+tot[4])/totN) : '-'}</td>
-      <td>${barHtml(tot, totN)}</td>
     </tr>`;
+  document.querySelector('#likertTable tbody').innerHTML =
+    lastRows.map(s => rowHtml(s, s.group ? 'group-row' : s.sub ? 'sub-row' : '')).join('') +
+    rowHtml({ ...total, no: '', q: '전체' }, 'sum-row');
 
   const openCard = document.getElementById('openCard');
   openCard.classList.toggle('hidden', !openCols.length);
@@ -314,7 +341,7 @@ document.getElementById('fileInput').addEventListener('change', e => {
 });
 document.getElementById('btnAnalyze').addEventListener('click', () => load(document.getElementById('pasteInput').value));
 document.getElementById('btnSample').addEventListener('click', () => {
-  const qs = ['교육 내용은 업무에 도움이 되었습니까?', '강사의 전문성에 만족하십니까?', '교육 시간과 일정은 적절했습니까?', '실습 환경과 자료에 만족하십니까?', '이 교육을 동료에게 추천하시겠습니까?'];
+  const qs = ['1-1. 교육 내용은 업무에 도움이 되었습니까?', '1-2. 교육 시간과 일정은 적절했습니까?', '2-1. 강사의 전문성에 만족하십니까?', '2-2. 실습 환경과 자료에 만족하십니까?', '3. 이 교육을 동료에게 추천하시겠습니까?'];
   const labels = ['매우 불만족','불만족','보통','만족','매우 만족'];
   const weights = [[0,1,3,10,12],[0,0,2,8,16],[1,3,6,10,6],[0,2,5,11,8],[0,1,4,9,12]];
   const lines = [['타임스탬프','분반',...qs,'좋았던 점','개선할 점'].join('\t')];
@@ -345,7 +372,7 @@ document.getElementById('sortBy').addEventListener('change', render);
 document.getElementById('btnPrint').addEventListener('click', () => window.print());
 document.getElementById('btnCopy').addEventListener('click', () => {
   const head = ['No','질문','응답 수','1점','2점','3점','4점','5점','평균','100점 환산','긍정률'];
-  const body = lastStats.map(s => [s.no, s.q, s.n, ...s.cnt, s.mean.toFixed(2), (s.mean*20).toFixed(1), pct(s.pos)]);
+  const body = lastRows.map(s => [s.no, s.q, s.n, ...s.cnt, s.mean.toFixed(2), (s.mean*20).toFixed(1), pct(s.pos)]);
   const tsv = [head, ...body].map(r => r.join('\t')).join('\n');
   navigator.clipboard.writeText(tsv).then(() => alert('표를 복사했습니다. 엑셀/시트에 붙여넣으세요.'));
 });
