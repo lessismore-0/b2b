@@ -39,6 +39,18 @@
   td.mean-cell.lv-mid { background:#fff1cc; }
   td.mean-cell.lv-bad { background:#fde2e2; }
   tr.group-row td.mean-cell, tr.sum-row td.mean-cell { font-size:15px; box-shadow:inset 0 0 0 2px rgba(0,0,0,.06); }
+  .nps-wrap { display:grid; grid-template-columns:220px 1fr; gap:22px; align-items:center; }
+  .nps-score { text-align:center; background:#eef5ff; border:1px solid #cfe0ff; border-radius:12px; padding:18px 10px; }
+  .nps-score .v { font-size:44px; font-weight:800; line-height:1.1; }
+  .nps-score .k { font-size:13px; color:#555; margin-top:6px; }
+  .nps-q { font-size:14px; font-weight:600; margin-bottom:12px; }
+  .nps-bar { display:flex; height:30px; border-radius:6px; overflow:hidden; background:#f1f3f6; margin-bottom:10px; }
+  .nps-bar span { display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; }
+  .np-pro { background:#16a34a; } .np-pas { background:#9ca3af; } .np-det { background:#dc2626; }
+  .nps-legend { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .nps-legend div { background:#f8f9fb; border-radius:8px; padding:10px 12px; font-size:12px; color:#555; }
+  .nps-legend b { display:block; font-size:16px; color:#222; margin-top:2px; }
+  .nps-legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
   .review h3 { font-size:14px; margin:18px 0 8px; }
   .review h3:first-child { margin-top:0; }
   .review ul { margin:0; padding-left:18px; font-size:13.5px; line-height:1.8; }
@@ -63,10 +75,12 @@
   @media (max-width:720px) {
     body { padding:16px; }
     .result-grid { grid-template-columns:1fr 1fr; }
+    .nps-wrap { grid-template-columns:1fr; }
+    .nps-legend { grid-template-columns:1fr; }
     .table-scroll { overflow-x:auto; }
   }
   @media print {
-    td.mean-cell, tr.group-row td { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .nps-bar span, td.mean-cell, tr.group-row td { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     body { background:#fff; padding:0; }
     .no-print { display:none !important; }
     .card { box-shadow:none; border:1px solid #e6e9ef; break-inside:avoid; }
@@ -112,6 +126,10 @@
         <select id="filterVal" class="hidden"></select>
       </div>
       <div class="row">
+        <label class="lbl">NPS 문항</label>
+        <select id="npsCol" style="max-width:100%"></select>
+      </div>
+      <div class="row">
         <label class="lbl">정렬</label>
         <select id="sortBy">
           <option value="order">설문 순서</option>
@@ -122,6 +140,23 @@
         <button class="btn btn-pdf" id="btnPrint">PDF 저장 / 인쇄</button>
       </div>
       <div class="hint" id="detectInfo"></div>
+    </div>
+
+    <div class="card" id="npsCard">
+      <h2>NPS (순추천지수)</h2>
+      <div class="nps-wrap">
+        <div class="nps-score"><div class="v" id="npsValue">-</div><div class="k" id="npsLevel"></div></div>
+        <div>
+          <div class="nps-q" id="npsQ"></div>
+          <div class="nps-bar" id="npsBar"></div>
+          <div class="nps-legend">
+            <div><i class="np-pro"></i><span id="npsProLbl">추천</span><b id="npsPro">-</b></div>
+            <div><i class="np-pas"></i><span id="npsPasLbl">중립</span><b id="npsPas">-</b></div>
+            <div><i class="np-det"></i><span id="npsDetLbl">비추천</span><b id="npsDet">-</b></div>
+          </div>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:10px" id="npsRule"></div>
     </div>
 
     <div class="card">
@@ -184,7 +219,9 @@ const LABEL_SCORES = {
 const OPEN_COLS = /의견|좋았던|아쉬운|개선|건의|바라는|자유|기타|하고\s*싶은|이유|소감/;
 const SKIP_COLS = /타임스탬프|timestamp|이메일|e-?mail|연락처|전화|휴대폰|성함|이름/i;
 
-let rows = [], headers = [], likertCols = [], openCols = [], catCols = [];
+let rows = [], headers = [], likertCols = [], openCols = [], catCols = [], elevenCols = [];
+// NPS 기본 문항: "전반적으로 만족" 문항, 없으면 "추천" 문항
+const NPS_DEFAULT = [/전반적으로\s*만족/, /추천/];
 
 function parseDelimited(text) {
   text = text.replace(/^﻿/, '');
@@ -218,11 +255,13 @@ function toScore(v) {
 }
 
 function classifyColumns() {
-  likertCols = []; openCols = []; catCols = [];
+  likertCols = []; openCols = []; catCols = []; elevenCols = [];
   headers.forEach((h, ci) => {
     if (SKIP_COLS.test(h)) return;
     const vals = rows.map(r => (r[ci] ?? '').trim()).filter(v => v);
     if (!vals.length) return;
+    // 0~10점 척도 (NPS 원형 문항)
+    if (vals.every(v => /^(10|[0-9])$/.test(v)) && vals.some(v => v === '0' || +v > 5)) { elevenCols.push(ci); return; }
     const scored = vals.filter(v => toScore(v) !== null).length;
     if (scored / vals.length >= 0.9) { likertCols.push(ci); return; }
     const uniq = new Set(vals);
@@ -248,6 +287,10 @@ function load(text) {
   fc.innerHTML = '<option value="">(전체 응답)</option>' +
     catCols.map(ci => `<option value="${ci}">${esc(headers[ci])}</option>`).join('');
   document.getElementById('filterVal').classList.add('hidden');
+  const npsOpts = [...likertCols, ...elevenCols].sort((a,b) => a - b);
+  const npsDefault = NPS_DEFAULT.map(re => npsOpts.find(ci => re.test(headers[ci]))).find(ci => ci !== undefined);
+  document.getElementById('npsCol').innerHTML = '<option value="">(NPS 표시 안 함)</option>' +
+    npsOpts.map(ci => `<option value="${ci}"${ci === npsDefault ? ' selected' : ''}>${esc(headers[ci])}${elevenCols.includes(ci) ? ' (0~10점)' : ''}</option>`).join('');
   document.getElementById('detectInfo').textContent =
     `자동 인식: 5점 척도 ${likertCols.length}문항 · 주관식 ${openCols.length}문항 · 선택형 ${catCols.length}문항`;
   document.getElementById('report').classList.remove('hidden');
@@ -341,8 +384,44 @@ function render() {
       ${ans.length ? '<ul>' + ans.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : '<div class="hint">응답 없음</div>'}</div>`;
   }).join('');
 
-  lastReview = { data, stats, blocks, total };
+  lastReview = { data, stats, blocks, total, nps: renderNps(data) };
   if (!reviewEdited) renderReview();
+}
+
+// ---- NPS ----
+// 0~10점: 9~10 추천 / 7~8 중립 / 0~6 비추천
+// 5점 척도: 5 추천 / 4 중립 / 1~3 비추천
+function renderNps(data) {
+  const sel = document.getElementById('npsCol').value;
+  const card = document.getElementById('npsCard');
+  card.classList.toggle('hidden', sel === '');
+  if (sel === '') return null;
+  const ci = +sel, eleven = elevenCols.includes(ci);
+  let pro = 0, pas = 0, det = 0;
+  data.forEach(r => {
+    const v = (r[ci] ?? '').trim();
+    const sc = eleven ? (/^(10|[0-9])$/.test(v) ? +v : null) : toScore(v);
+    if (sc === null) return;
+    if (eleven) { if (sc >= 9) pro++; else if (sc >= 7) pas++; else det++; }
+    else { if (sc === 5) pro++; else if (sc === 4) pas++; else det++; }
+  });
+  const n = pro + pas + det;
+  const nps = n ? Math.round((pro - det) / n * 100) : 0;
+  const level = nps >= 50 ? '매우 우수' : nps >= 30 ? '우수' : nps >= 0 ? '양호' : '개선 필요';
+  const color = nps >= 30 ? '#16a34a' : nps >= 0 ? '#2d6cdf' : '#dc2626';
+  const lbl = eleven ? ['추천 (9~10점)', '중립 (7~8점)', '비추천 (0~6점)'] : ['추천 (5점)', '중립 (4점)', '비추천 (1~3점)'];
+
+  document.getElementById('npsValue').innerHTML = n ? `<span style="color:${color}">${nps > 0 ? '+' : ''}${nps}</span>` : '-';
+  document.getElementById('npsLevel').textContent = n ? `${level} · 응답 ${n}명` : '응답 없음';
+  document.getElementById('npsQ').textContent = plainQ(headers[ci]);
+  document.getElementById('npsBar').innerHTML = !n ? '' : [[pro,'np-pro'],[pas,'np-pas'],[det,'np-det']].map(([c,cls]) =>
+    c ? `<span class="${cls}" style="width:${c/n*100}%">${c/n >= 0.08 ? pct(c/n) : ''}</span>` : '').join('');
+  ['npsProLbl','npsPasLbl','npsDetLbl'].forEach((id,i) => document.getElementById(id).textContent = lbl[i]);
+  [['npsPro',pro],['npsPas',pas],['npsDet',det]].forEach(([id,c]) =>
+    document.getElementById(id).textContent = n ? `${c}명 (${pct(c/n)})` : '-');
+  document.getElementById('npsRule').textContent =
+    `NPS = 추천 비율 − 비추천 비율 (−100 ~ +100) · ${eleven ? '0~10점 표준 기준' : '5점 척도 환산 기준: 5점 추천, 4점 중립, 1~3점 비추천'} · 50 이상 매우 우수 / 30 이상 우수 / 0 이상 양호 / 0 미만 개선 필요`;
+  return n ? { nps, level, pro: pro/n, det: det/n, q: plainQ(headers[ci]) } : null;
 }
 
 // ---- 총평 및 향후 액션 (자동 초안) ----
@@ -362,7 +441,7 @@ function negRate(s) { return s.n ? (s.cnt[0] + s.cnt[1]) / s.n : 0; }
 function renderReview() {
   const el = document.getElementById('reviewBody');
   if (!lastReview) { el.innerHTML = ''; return; }
-  const { data, stats, blocks, total } = lastReview;
+  const { data, stats, blocks, total, nps } = lastReview;
   // 평가 단위: 묶음이 있으면 묶음 평균, 없으면 개별 문항
   const units = blocks.map(b => b.main
     ? { label: `${b.main}번 영역`, desc: b.stat.title, ...b.stat }
@@ -381,6 +460,7 @@ function renderReview() {
   const summary = [
     `응답자 ${data.length}명, 5점 척도 ${items.length}문항 기준 전체 평균 <b>${total.mean.toFixed(2)}점</b>(100점 환산 ${(total.mean*20).toFixed(1)}점), 긍정률 <b>${pct(total.pos)}</b>로 ${level}.`,
   ];
+  if (nps) summary.push(`‘${esc(nps.q)}’ 기준 NPS는 <b>${nps.nps > 0 ? '+' : ''}${nps.nps}</b>(${nps.level})로, 추천 ${pct(nps.pro)} · 비추천 ${pct(nps.det)}입니다.`);
   if (units.length > 1 && blocks.some(b => b.main)) {
     const u = [...units].sort((a,b) => b.mean - a.mean);
     summary.push(`영역별로는 ${esc(u[0].label)}(${u[0].mean.toFixed(2)}점)이 가장 높고, ${esc(u[u.length-1].label)}(${u[u.length-1].mean.toFixed(2)}점)이 가장 낮습니다.`);
@@ -405,6 +485,7 @@ function renderReview() {
   });
   if (!low.length) actions.unshift('[유지] 모든 문항이 4.0점 이상으로, 현재 운영 방식과 커리큘럼을 유지합니다.');
   actions.push(`[강화] 강점 문항 ${fmt(best[0])}은 제안서·후속 과정 안내 시 성과 근거로 활용합니다.`);
+  if (nps && nps.nps < 30) actions.push(`[NPS] 비추천 응답(${pct(nps.det)})의 사유를 주관식·후속 인터뷰로 확인해 NPS 30 이상을 다음 차수 목표로 설정합니다.`);
   if (negItems.length) actions.push('[확인] 1~2점 응답이 많은 문항은 주관식 의견과 함께 원인을 확인하고, 가능하면 담당자·수강생 인터뷰로 보완합니다.');
   const openN = openCols.reduce((a,ci) => a + data.filter(r => (r[ci] ?? '').trim() && !/^(없음|없습니다|x|-|\.)$/i.test(r[ci].trim())).length, 0);
   if (openN) actions.push(`[반영] 주관식 의견 ${openN}건을 유형별로 분류해 다음 차수 개선 항목에 반영합니다.`);
@@ -437,9 +518,9 @@ document.getElementById('fileInput').addEventListener('change', e => {
 });
 document.getElementById('btnAnalyze').addEventListener('click', () => load(document.getElementById('pasteInput').value));
 document.getElementById('btnSample').addEventListener('click', () => {
-  const qs = ['1-1. 교육 내용은 업무에 도움이 되었습니까?', '1-2. 교육 난이도는 적절했습니까?', '1-3. 교육 시간과 일정은 적절했습니까?', '2-1. 강사의 전문성에 만족하십니까?', '2-2. 실습 환경과 자료에 만족하십니까?', '3. 이 교육을 동료에게 추천하시겠습니까?'];
+  const qs = ['1-1. 교육 내용은 업무에 도움이 되었습니까?', '1-2. 교육 난이도는 적절했습니까?', '1-3. 교육 시간과 일정은 적절했습니까?', '2-1. 강사의 전문성에 만족하십니까?', '2-2. 실습 환경과 자료에 만족하십니까?', '3. 이 교육을 동료에게 추천하시겠습니까?', '4. 본 교육 과정에 전반적으로 만족하셨나요?'];
   const labels = ['매우 불만족','불만족','보통','만족','매우 만족'];
-  const weights = [[0,1,3,10,12],[0,2,6,10,8],[1,3,6,10,6],[0,0,2,8,16],[0,2,5,11,8],[0,1,4,9,12]];
+  const weights = [[0,1,3,10,12],[0,2,6,10,8],[1,3,6,10,6],[0,0,2,8,16],[0,2,5,11,8],[0,1,4,9,12],[0,1,4,9,12]];
   const lines = [['타임스탬프','분반',...qs,'좋았던 점','개선할 점'].join('\t')];
   for (let i = 0; i < 26; i++) {
     const ans = weights.map(w => {
@@ -464,6 +545,7 @@ document.getElementById('filterCol').addEventListener('change', e => {
   render();
 });
 document.getElementById('filterVal').addEventListener('change', render);
+document.getElementById('npsCol').addEventListener('change', render);
 document.getElementById('reviewBody').addEventListener('input', () => { reviewEdited = true; });
 document.getElementById('btnRegen').addEventListener('click', () => { reviewEdited = false; renderReview(); });
 document.getElementById('sortBy').addEventListener('change', render);
