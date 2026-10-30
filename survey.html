@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>만족도 조사 5점 척도 분석</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f4f6f9; margin:0; padding:24px; color:#222; }
+  .wrap { max-width:1080px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .sub { color:#777; font-size:13px; margin-bottom:20px; line-height:1.6; }
+  .card { background:#fff; border-radius:12px; padding:22px; margin-bottom:18px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .card h2 { font-size:16px; margin:0 0 16px; padding-bottom:8px; border-bottom:2px solid #eef0f4; }
+  .row { display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+  label.lbl { width:150px; font-size:14px; font-weight:600; }
+  input[type="text"], select, textarea { padding:8px 10px; border:1px solid #d0d5dd; border-radius:7px; font-size:14px; font-family:inherit; }
+  textarea { width:100%; min-height:110px; font-size:12px; }
+  .btn { padding:9px 16px; border:none; border-radius:7px; font-size:14px; cursor:pointer; font-weight:600; }
+  .btn-add { background:#2d6cdf; color:#fff; }
+  .btn-add:hover { background:#245bc0; }
+  .btn-sub { background:#eef0f4; color:#333; }
+  .btn-pdf { background:#16a34a; color:#fff; }
+  .btn-pdf:hover { background:#138a3e; }
+  .hint { font-size:12px; color:#888; }
+  .msg { font-size:13px; color:#dc2626; margin-top:6px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:8px; border:1px solid #e6e9ef; font-size:13px; vertical-align:middle; }
+  th { background:#f8f9fb; color:#555; text-align:center; white-space:nowrap; }
+  td.num { text-align:right; white-space:nowrap; }
+  td.q { min-width:220px; }
+  tr.sum-row td { background:#eef5ff; font-weight:700; }
+  tr.group-row td { background:#f6f8fb; font-weight:700; }
+  tr.sub-row td.q { padding-left:22px; }
+  .result-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .result-box { background:#f8f9fb; border-radius:9px; padding:14px 16px; }
+  .result-box .k { font-size:13px; color:#777; }
+  .result-box .v { font-size:22px; font-weight:700; margin-top:4px; }
+  .highlight { background:#eef5ff; border:1px solid #cfe0ff; }
+  .bar { display:flex; height:22px; border-radius:5px; overflow:hidden; min-width:240px; background:#f1f3f6; }
+  .bar span { display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; white-space:nowrap; overflow:hidden; }
+  .s1 { background:#dc2626; } .s2 { background:#f59e0b; } .s3 { background:#9ca3af; } .s4 { background:#60a5fa; } .s5 { background:#2d6cdf; }
+  .legend { display:flex; gap:14px; font-size:12px; color:#555; margin-bottom:10px; flex-wrap:wrap; }
+  .legend i { display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+  .score { font-weight:700; }
+  .score.good { color:#16a34a; } .score.mid { color:#e6a700; } .score.bad { color:#dc2626; }
+  .open-q { margin-bottom:16px; }
+  .open-q h3 { font-size:14px; margin:0 0 8px; }
+  .open-q ul { margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#333; }
+  .hidden { display:none; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px; }
+  @media (max-width:720px) {
+    body { padding:16px; }
+    .result-grid { grid-template-columns:1fr 1fr; }
+    .table-scroll { overflow-x:auto; }
+  }
+  @media print {
+    body { background:#fff; padding:0; }
+    .no-print { display:none !important; }
+    .card { box-shadow:none; border:1px solid #e6e9ef; break-inside:avoid; }
+    .bar span { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1>만족도 조사 5점 척도 분석</h1>
+      <div class="sub">Google Forms 응답을 불러오면 5점 척도 문항을 자동으로 찾아 질문별 평균·분포·긍정률을 보여줍니다.</div>
+    </div>
+    <div class="no-print"><a href="index.html" class="hint">← 입찰 투찰율 시뮬레이션</a></div>
+  </div>
+
+  <div class="card no-print">
+    <h2>1. 응답 데이터 불러오기</h2>
+    <div class="row">
+      <label class="lbl">CSV 파일</label>
+      <input type="file" id="fileInput" accept=".csv,.tsv,.txt">
+      <span class="hint">응답 시트 → 파일 → 다운로드 → CSV</span>
+    </div>
+    <div class="row">
+      <label class="lbl">시트 붙여넣기</label>
+      <span class="hint">응답 시트에서 머리글 행부터 전체 선택(Ctrl+A) → 복사 → 아래에 붙여넣기</span>
+    </div>
+    <textarea id="pasteInput" placeholder="타임스탬프&#9;강의 내용에 만족하십니까?&#9;..."></textarea>
+    <div class="row" style="margin-top:12px">
+      <button class="btn btn-add" id="btnAnalyze">분석하기</button>
+      <button class="btn btn-sub" id="btnSample">예시 데이터</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div id="report" class="hidden">
+    <div class="card no-print" id="filterCard">
+      <h2>2. 보기 설정</h2>
+      <div class="row">
+        <label class="lbl">응답 필터</label>
+        <select id="filterCol"><option value="">(전체 응답)</option></select>
+        <select id="filterVal" class="hidden"></select>
+      </div>
+      <div class="row">
+        <label class="lbl">정렬</label>
+        <select id="sortBy">
+          <option value="order">설문 순서</option>
+          <option value="desc">평균 높은 순</option>
+          <option value="asc">평균 낮은 순</option>
+        </select>
+        <button class="btn btn-sub" id="btnCopy">표 복사 (엑셀 붙여넣기용)</button>
+        <button class="btn btn-pdf" id="btnPrint">PDF 저장 / 인쇄</button>
+      </div>
+      <div class="hint" id="detectInfo"></div>
+    </div>
+
+    <div class="card">
+      <h2>요약</h2>
+      <div class="result-grid">
+        <div class="result-box"><div class="k">응답자 수</div><div class="v" id="sumN">-</div></div>
+        <div class="result-box"><div class="k">5점 척도 문항 수</div><div class="v" id="sumQ">-</div></div>
+        <div class="result-box highlight"><div class="k">전체 평균 (5점 만점)</div><div class="v" id="sumMean">-</div></div>
+        <div class="result-box"><div class="k">전체 긍정률 (4·5점)</div><div class="v" id="sumPos">-</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>질문별 5점 척도 결과</h2>
+      <div class="legend">
+        <span><i class="s1"></i>1점</span><span><i class="s2"></i>2점</span><span><i class="s3"></i>3점</span><span><i class="s4"></i>4점</span><span><i class="s5"></i>5점</span>
+      </div>
+      <div class="table-scroll">
+        <table id="likertTable">
+          <thead>
+            <tr>
+              <th>No</th><th>질문</th><th>응답</th><th>1점</th><th>2점</th><th>3점</th><th>4점</th><th>5점</th>
+              <th>평균</th><th>100점 환산</th><th>긍정률</th><th>분포</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="hint" style="margin-top:8px">100점 환산 = 평균 × 20 · 긍정률 = (4점 + 5점) ÷ 응답 수 · 1-1, 1-2처럼 하위 번호가 있는 문항은 상위 번호(1번) 평균을 함께 표시</div>
+    </div>
+
+    <div class="card" id="openCard">
+      <h2>주관식 응답</h2>
+      <div id="openList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 5점 척도 라벨 → 점수 (공백 제거 후 비교)
+const LABEL_SCORES = {
+  '매우만족':5, '만족':4, '보통':3, '불만족':2, '매우불만족':1,
+  '매우그렇다':5, '그렇다':4, '보통이다':3, '그렇지않다':2, '전혀그렇지않다':1, '매우그렇지않다':1,
+  '매우우수':5, '우수':4, '미흡':2, '매우미흡':1,
+  '매우높음':5, '높음':4, '낮음':2, '매우낮음':1,
+  '매우좋음':5, '좋음':4, '나쁨':2, '매우나쁨':1,
+  '매우도움':5, '도움':4, '도움안됨':2, '전혀도움안됨':1,
+  '매우유익':5, '유익':4, '유익하지않음':2, '전혀유익하지않음':1,
+  '적극추천':5, '추천':4, '비추천':2, '절대비추천':1,
+};
+const OPEN_COLS = /의견|좋았던|아쉬운|개선|건의|바라는|자유|기타|하고\s*싶은|이유|소감/;
+const SKIP_COLS = /타임스탬프|timestamp|이메일|e-?mail|연락처|전화|휴대폰|성함|이름/i;
+
+let rows = [], headers = [], likertCols = [], openCols = [], catCols = [];
+
+function parseDelimited(text) {
+  text = text.replace(/^﻿/, '');
+  const firstLine = text.split(/\r?\n/)[0] || '';
+  const delim = (firstLine.split('\t').length > firstLine.split(',').length) ? '\t' : ',';
+  const out = []; let row = [], cell = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i+1] === '"') { cell += '"'; i++; } else inQ = false; }
+      else cell += c;
+    } else if (c === '"' && cell === '') inQ = true;
+    else if (c === delim) { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i+1] === '\n') i++;
+      row.push(cell); out.push(row); row = []; cell = '';
+    } else cell += c;
+  }
+  if (cell !== '' || row.length) { row.push(cell); out.push(row); }
+  return out.filter(r => r.some(v => v.trim() !== ''));
+}
+
+// 응답 하나를 1~5점으로 변환, 변환 불가면 null
+function toScore(v) {
+  const s = String(v).trim();
+  if (!s) return null;
+  const m = s.match(/^([1-5])(\s*점)?(\s*[\(\-:.].*)?$/);
+  if (m) return +m[1];
+  const key = s.replace(/[\s.]/g, '').replace(/^[1-5]?[\(\)]*/, '').replace(/[\(\)]/g, '');
+  return LABEL_SCORES[key] ?? null;
+}
+
+function classifyColumns() {
+  likertCols = []; openCols = []; catCols = [];
+  headers.forEach((h, ci) => {
+    if (SKIP_COLS.test(h)) return;
+    const vals = rows.map(r => (r[ci] ?? '').trim()).filter(v => v);
+    if (!vals.length) return;
+    const scored = vals.filter(v => toScore(v) !== null).length;
+    if (scored / vals.length >= 0.9) { likertCols.push(ci); return; }
+    const uniq = new Set(vals);
+    const avgLen = vals.reduce((a,v) => a + v.length, 0) / vals.length;
+    if (OPEN_COLS.test(h) || avgLen > 20) { openCols.push(ci); return; }
+    if (uniq.size <= Math.max(10, rows.length * 0.3) && uniq.size < vals.length) catCols.push(ci);
+    else openCols.push(ci);
+  });
+}
+
+function load(text) {
+  const msg = document.getElementById('msg');
+  msg.textContent = '';
+  const data = parseDelimited(text);
+  if (data.length < 2) { msg.textContent = '머리글 행과 응답 행이 필요합니다.'; return; }
+  headers = data[0].map(h => h.trim());
+  rows = data.slice(1);
+  classifyColumns();
+  if (!likertCols.length) { msg.textContent = '5점 척도(1~5점 또는 매우 만족~매우 불만족) 문항을 찾지 못했습니다.'; return; }
+
+  const fc = document.getElementById('filterCol');
+  fc.innerHTML = '<option value="">(전체 응답)</option>' +
+    catCols.map(ci => `<option value="${ci}">${esc(headers[ci])}</option>`).join('');
+  document.getElementById('filterVal').classList.add('hidden');
+  document.getElementById('detectInfo').textContent =
+    `자동 인식: 5점 척도 ${likertCols.length}문항 · 주관식 ${openCols.length}문항 · 선택형 ${catCols.length}문항`;
+  document.getElementById('report').classList.remove('hidden');
+  render();
+}
+
+function filteredRows() {
+  const fc = document.getElementById('filterCol').value;
+  const fv = document.getElementById('filterVal').value;
+  if (fc === '') return rows;
+  return rows.filter(r => (r[fc] ?? '').trim() === fv);
+}
+
+// "1-1." "1.2)" "[2-3]" 같은 하위 번호 → { main:'1', label:'1-1' }
+const SUB_NO = /^\s*\[?(\d+)\s*[-–._]\s*(\d+)\]?[.)]?\s+/;
+const TOP_NO = /^\s*\[?(\d+)\]?[.)]\s+/;
+function subNo(q) {
+  const m = q.match(SUB_NO);
+  return m ? { main: m[1], label: `${m[1]}-${m[2]}` } : null;
+}
+
+function summarize(cnt) {
+  const n = cnt.reduce((a,b) => a+b, 0);
+  const mean = n ? cnt.reduce((a,c,i) => a + c*(i+1), 0) / n : 0;
+  return { cnt, n, mean, pos: n ? (cnt[3]+cnt[4]) / n : 0 };
+}
+
+let lastRows = [];
+function render() {
+  const data = filteredRows();
+  const stats = likertCols.map((ci, idx) => {
+    const cnt = [0,0,0,0,0];
+    data.forEach(r => { const s = toScore(r[ci] ?? ''); if (s) cnt[s-1]++; });
+    const sn = subNo(headers[ci]);
+    const top = headers[ci].match(TOP_NO);
+    return { no: sn ? sn.label : top ? top[1] : String(idx+1), main: sn?.main, q: headers[ci], ...summarize(cnt) };
+  });
+
+  // 같은 상위 번호(1-1, 1-2 …)끼리 묶어 상위 번호 평균을 함께 표기
+  const blocks = [];
+  stats.forEach(s => {
+    const last = blocks[blocks.length - 1];
+    if (s.main && last?.main === s.main) last.items.push(s);
+    else blocks.push({ main: s.main, items: [s] });
+  });
+  blocks.forEach(b => {
+    if (!b.main) { b.stat = b.items[0]; return; }
+    const cnt = [0,0,0,0,0];
+    b.items.forEach(s => s.cnt.forEach((c,i) => cnt[i] += c));
+    b.stat = { no: b.main, q: `${b.main}번 평균 (${b.items.map(s => s.no).join(', ')})`, ...summarize(cnt) };
+  });
+
+  const sort = document.getElementById('sortBy').value;
+  const cmp = sort === 'desc' ? (a,b) => b.mean - a.mean : sort === 'asc' ? (a,b) => a.mean - b.mean : null;
+  if (cmp) {
+    blocks.forEach(b => b.items.sort(cmp));
+    blocks.sort((a,b) => cmp(a.stat, b.stat));
+  }
+  lastRows = blocks.flatMap(b => b.main ? [{ ...b.stat, group: true }, ...b.items.map(s => ({ ...s, sub: true }))] : b.items);
+
+  const tot = [0,0,0,0,0];
+  stats.forEach(s => s.cnt.forEach((c,i) => tot[i] += c));
+  const total = summarize(tot);
+
+  document.getElementById('sumN').textContent = data.length + '명';
+  document.getElementById('sumQ').textContent = stats.length + '개';
+  document.getElementById('sumMean').innerHTML = scoreHtml(total.mean) + ` <span style="font-size:13px;color:#777">(${(total.mean*20).toFixed(1)}점)</span>`;
+  document.getElementById('sumPos').textContent = total.n ? pct(total.pos) : '-';
+
+  const rowHtml = (s, cls) => `
+    <tr class="${cls}">
+      <td class="num">${esc(s.no)}</td>
+      <td class="q">${esc(s.q)}</td>
+      <td class="num">${s.n}</td>
+      ${s.cnt.map(c => `<td class="num">${c}<br><span class="hint">${s.n ? pct(c/s.n) : '-'}</span></td>`).join('')}
+      <td class="num">${scoreHtml(s.mean)}</td>
+      <td class="num">${(s.mean*20).toFixed(1)}</td>
+      <td class="num">${s.n ? pct(s.pos) : '-'}</td>
+      <td>${barHtml(s.cnt, s.n)}</td>
+    </tr>`;
+  document.querySelector('#likertTable tbody').innerHTML =
+    lastRows.map(s => rowHtml(s, s.group ? 'group-row' : s.sub ? 'sub-row' : '')).join('') +
+    rowHtml({ ...total, no: '', q: '전체' }, 'sum-row');
+
+  const openCard = document.getElementById('openCard');
+  openCard.classList.toggle('hidden', !openCols.length);
+  document.getElementById('openList').innerHTML = openCols.map(ci => {
+    const ans = data.map(r => (r[ci] ?? '').trim()).filter(v => v && !/^(없음|없습니다|x|-|\.)$/i.test(v));
+    return `<div class="open-q"><h3>${esc(headers[ci])} <span class="hint">(${ans.length}건)</span></h3>
+      ${ans.length ? '<ul>' + ans.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : '<div class="hint">응답 없음</div>'}</div>`;
+  }).join('');
+}
+
+function barHtml(cnt, n) {
+  if (!n) return '';
+  return '<div class="bar">' + cnt.map((c,i) => {
+    const w = c / n * 100;
+    return w ? `<span class="s${i+1}" style="width:${w}%" title="${i+1}점 ${c}명 (${w.toFixed(1)}%)">${w >= 8 ? Math.round(w)+'%' : ''}</span>` : '';
+  }).join('') + '</div>';
+}
+function scoreHtml(m) {
+  const cls = m >= 4.5 ? 'good' : m >= 4 ? '' : m >= 3 ? 'mid' : 'bad';
+  return `<span class="score ${cls}">${m ? m.toFixed(2) : '-'}</span>`;
+}
+function pct(x) { return (x*100).toFixed(1) + '%'; }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.getElementById('fileInput').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => load(reader.result);
+  reader.readAsText(f, 'utf-8');
+});
+document.getElementById('btnAnalyze').addEventListener('click', () => load(document.getElementById('pasteInput').value));
+document.getElementById('btnSample').addEventListener('click', () => {
+  const qs = ['1-1. 교육 내용은 업무에 도움이 되었습니까?', '1-2. 교육 시간과 일정은 적절했습니까?', '2-1. 강사의 전문성에 만족하십니까?', '2-2. 실습 환경과 자료에 만족하십니까?', '3. 이 교육을 동료에게 추천하시겠습니까?'];
+  const labels = ['매우 불만족','불만족','보통','만족','매우 만족'];
+  const weights = [[0,1,3,10,12],[0,0,2,8,16],[1,3,6,10,6],[0,2,5,11,8],[0,1,4,9,12]];
+  const lines = [['타임스탬프','분반',...qs,'좋았던 점','개선할 점'].join('\t')];
+  for (let i = 0; i < 26; i++) {
+    const ans = weights.map(w => {
+      let r = Math.random() * w.reduce((a,b) => a+b, 0);
+      for (let k = 0; k < 5; k++) { r -= w[k]; if (r < 0) return i % 2 ? labels[k] : String(k+1); }
+      return '5';
+    });
+    lines.push([`2026. 10. ${10 + i % 15}`, i % 2 ? 'A반' : 'B반', ...ans,
+      ['실습 위주라 좋았습니다', '', '바로 업무에 쓸 수 있는 예제', ''][i % 4],
+      ['', '시간이 조금 부족했어요', '', '사전 자료 공유가 있었으면'][i % 4]].join('\t'));
+  }
+  document.getElementById('pasteInput').value = lines.join('\n');
+  load(lines.join('\n'));
+});
+document.getElementById('filterCol').addEventListener('change', e => {
+  const fv = document.getElementById('filterVal');
+  const ci = e.target.value;
+  if (ci === '') { fv.classList.add('hidden'); render(); return; }
+  const vals = [...new Set(rows.map(r => (r[ci] ?? '').trim()).filter(v => v))].sort();
+  fv.innerHTML = vals.map(v => `<option>${esc(v)}</option>`).join('');
+  fv.classList.remove('hidden');
+  render();
+});
+document.getElementById('filterVal').addEventListener('change', render);
+document.getElementById('sortBy').addEventListener('change', render);
+document.getElementById('btnPrint').addEventListener('click', () => window.print());
+document.getElementById('btnCopy').addEventListener('click', () => {
+  const head = ['No','질문','응답 수','1점','2점','3점','4점','5점','평균','100점 환산','긍정률'];
+  const body = lastRows.map(s => [s.no, s.q, s.n, ...s.cnt, s.mean.toFixed(2), (s.mean*20).toFixed(1), pct(s.pos)]);
+  const tsv = [head, ...body].map(r => r.join('\t')).join('\n');
+  navigator.clipboard.writeText(tsv).then(() => alert('표를 복사했습니다. 엑셀/시트에 붙여넣으세요.'));
+});
+</script>
+</body>
+</html>
