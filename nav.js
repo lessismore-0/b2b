@@ -3,6 +3,7 @@
 (function () {
   const PAGES = [
     { href: 'index.html', label: '입찰 시뮬레이션', desc: '예산·지출 기반 투찰율/투찰가 계산' },
+    { href: 'bid-rate.html', label: '투찰율 계산기', desc: '사업 예산·투찰가로 투찰율 계산' },
     { href: 'survey.html', label: '만족도 분석', desc: '질문별 5점 척도·NPS·총평' },
   ];
   const BAR_H = 52;

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>투찰율 계산기</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f4f6f9; margin:0; padding:24px; color:#222; }
+  .wrap { max-width:1080px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .sub { color:#777; font-size:13px; margin-bottom:20px; }
+  .card { background:#fff; border-radius:12px; padding:22px; margin-bottom:18px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .card h2 { font-size:16px; margin:0 0 16px; padding-bottom:8px; border-bottom:2px solid #eef0f4; }
+  .row { display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+  label.lbl { width:150px; font-size:14px; font-weight:600; }
+  input[type="text"] { padding:9px 12px; border:1px solid #d0d5dd; border-radius:7px; font-size:15px; width:240px; text-align:right; }
+  .unit { font-size:14px; color:#555; }
+  .chk { font-size:14px; cursor:pointer; display:flex; align-items:center; gap:6px; color:#333; }
+  .chk input { width:16px; height:16px; cursor:pointer; }
+  .btn { padding:9px 16px; border:none; border-radius:7px; font-size:14px; cursor:pointer; font-weight:600; }
+  .btn-sub { background:#eef0f4; color:#333; }
+  .btn-pdf { background:#16a34a; color:#fff; font-size:15px; padding:11px 22px; }
+  .btn-pdf:hover { background:#138a3e; }
+  .topbar { display:flex; justify-content:flex-end; gap:10px; margin-bottom:14px; }
+  .rate-box { background:#eef5ff; border:1px solid #cfe0ff; border-radius:12px; padding:20px; text-align:center; margin-bottom:16px; }
+  .rate-box .k { font-size:14px; color:#555; }
+  .rate-box .v { font-size:40px; font-weight:800; color:#2d6cff; margin-top:4px; }
+  .rate-box .basis { font-size:12px; color:#888; margin-top:6px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:9px 10px; border:1px solid #e6e9ef; font-size:14px; }
+  th { background:#f8f9fb; color:#555; text-align:center; }
+  td.num { text-align:right; white-space:nowrap; }
+  td.label-cell { background:#fafbfc; font-weight:600; text-align:center; white-space:nowrap; }
+  td.base { background:#fffbe8; font-weight:700; }
+  .pos { color:#16a34a; } .neg { color:#dc2626; }
+  .note { font-size:12px; color:#999; margin-top:8px; line-height:1.6; }
+  @media (max-width:680px) {
+    body { padding:16px; }
+    label.lbl { width:100%; }
+    input[type="text"] { width:100%; flex:1; }
+    .table-scroll { overflow-x:auto; }
+  }
+  @media print {
+    body { background:#fff; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .card { box-shadow:none; border:1px solid #ddd; page-break-inside:avoid; }
+    .no-print { display:none !important; }
+    input[type="text"] { border:none; }
+    @page { margin:14mm; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>투찰율 계산기</h1>
+  <div class="sub">사업 예산과 투찰가를 입력하면 투찰율을 자동으로 계산합니다.</div>
+
+  <div class="topbar no-print">
+    <button class="btn btn-sub" id="btnReset">초기화</button>
+    <button class="btn btn-pdf" onclick="window.print()">📄 PDF 다운로드</button>
+  </div>
+
+  <div class="card">
+    <h2>1. 금액 입력</h2>
+    <div class="row">
+      <label class="lbl" for="budget">사업 예산</label>
+      <input type="text" id="budget" inputmode="numeric" placeholder="예산금액 입력">
+      <span class="unit">원</span>
+      <label class="chk"><input type="checkbox" id="budgetExVat"> VAT 불포함</label>
+    </div>
+    <div class="row">
+      <label class="lbl" for="bid">투찰가</label>
+      <input type="text" id="bid" inputmode="numeric" placeholder="투찰금액 입력">
+      <span class="unit">원</span>
+      <label class="chk"><input type="checkbox" id="bidExVat"> VAT 불포함</label>
+    </div>
+    <div class="note">기본은 입력한 금액이 VAT 포함 금액입니다. 공급가액(부가세 제외)으로 입력했다면 옆의 "VAT 불포함"을 체크하세요. VAT는 10% 고정이며, 예산과 투찰가를 같은 기준(공급가액)으로 맞춘 뒤 투찰율을 계산합니다.</div>
+  </div>
+
+  <div class="card">
+    <h2>2. 계산 결과</h2>
+    <div class="rate-box">
+      <div class="k">투찰율</div>
+      <div class="v" id="rate">- %</div>
+      <div class="basis">투찰율 = 투찰가(공급가액) ÷ 사업 예산(공급가액) × 100</div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>구분</th><th>공급가액 (VAT 제외)</th><th>부가세 (10%)</th><th>합계 (VAT 포함)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="label-cell">사업 예산</td><td class="num" id="bNet">-</td><td class="num" id="bVat">-</td><td class="num" id="bTot">-</td></tr>
+          <tr><td class="label-cell">투찰가</td><td class="num" id="pNet">-</td><td class="num" id="pVat">-</td><td class="num" id="pTot">-</td></tr>
+          <tr><td class="label-cell">예산 − 투찰가</td><td class="num" id="dNet">-</td><td class="num" id="dVat">-</td><td class="num" id="dTot">-</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">노란색 칸은 직접 입력한 금액, 나머지는 VAT 10%로 환산한 금액입니다. 원 단위 미만은 반올림합니다.</div>
+  </div>
+</div>
+
+<script>
+  const VAT_RATE = 0.10; // VAT 10% 고정
+  const $ = id => document.getElementById(id);
+  const won = v => Math.round(v).toLocaleString('ko-KR') + ' 원';
+  const num = el => parseFloat(el.value.replace(/[^\d.]/g, '')) || 0;
+
+  // 입력값과 VAT 기준으로 공급가액·부가세·합계 산출
+  function split(amount, exVat) {
+    const net = exVat ? amount : amount / (1 + VAT_RATE);
+    return { net, vat: net * VAT_RATE, tot: net * (1 + VAT_RATE) };
+  }
+
+  function fmtInput(el) {
+    const pos = el.value.length - el.selectionStart;
+    const digits = el.value.replace(/[^\d]/g, '');
+    el.value = digits ? Number(digits).toLocaleString('ko-KR') : '';
+    const p = Math.max(0, el.value.length - pos);
+    el.setSelectionRange(p, p);
+  }
+
+  function calc() {
+    const budget = num($('budget')), bid = num($('bid'));
+    const bEx = $('budgetExVat').checked, pEx = $('bidExVat').checked;
+    const b = split(budget, bEx), p = split(bid, pEx);
+
+    [['bNet', b.net], ['bVat', b.vat], ['bTot', b.tot], ['pNet', p.net], ['pVat', p.vat], ['pTot', p.tot]]
+      .forEach(([id, v]) => $(id).textContent = v ? won(v) : '-');
+    [['dNet', b.net - p.net], ['dVat', b.vat - p.vat], ['dTot', b.tot - p.tot]].forEach(([id, v]) => {
+      $(id).textContent = budget && bid ? won(v) : '-';
+      $(id).className = 'num' + (budget && bid ? (v < 0 ? ' neg' : ' pos') : '');
+    });
+    // 입력한 칸 강조
+    $(bEx ? 'bNet' : 'bTot').classList.add('base');
+    $(pEx ? 'pNet' : 'pTot').classList.add('base');
+    $(bEx ? 'bTot' : 'bNet').classList.remove('base');
+    $(pEx ? 'pTot' : 'pNet').classList.remove('base');
+
+    const rate = budget && bid ? p.net / b.net * 100 : null;
+    $('rate').textContent = rate === null ? '- %' : rate.toFixed(3) + ' %';
+    $('rate').style.color = rate !== null && rate > 100 ? '#dc2626' : '';
+  }
+
+  ['budget', 'bid'].forEach(id => $(id).addEventListener('input', e => { fmtInput(e.target); calc(); }));
+  ['budgetExVat', 'bidExVat'].forEach(id => $(id).addEventListener('change', calc));
+  $('btnReset').addEventListener('click', () => {
+    $('budget').value = ''; $('bid').value = '';
+    $('budgetExVat').checked = false; $('bidExVat').checked = false;
+    calc();
+  });
+  calc();
+</script>
+<script src="nav.js"></script>
+</body>
+</html>
